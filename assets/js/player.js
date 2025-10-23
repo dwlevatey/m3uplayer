@@ -2,6 +2,7 @@ let allChannels = []
 let groupedChannels = {}
 let categories = []
 let currentView = "home"
+let hls
 
 // Initialize
 document.addEventListener("DOMContentLoaded", () => {
@@ -132,98 +133,50 @@ function renderHomeView() {
     renderFeaturedChannel(featured)
   }
 
-  // Render categories with content type detection
   const container = document.getElementById("categoriesContainer")
   container.innerHTML = ""
 
-  // Separate categories by type
-  const movieCategories = categories.filter(
-    (cat) =>
-      cat.toLowerCase().includes("filme") ||
-      cat.toLowerCase().includes("movie") ||
-      cat.toLowerCase().includes("cinema"),
-  )
-
-  const seriesCategories = categories.filter(
-    (cat) =>
-      cat.toLowerCase().includes("série") ||
-      cat.toLowerCase().includes("series") ||
-      cat.toLowerCase().includes("novela"),
-  )
-
-  const channelCategories = categories.filter(
-    (cat) => !movieCategories.includes(cat) && !seriesCategories.includes(cat),
-  )
-
-  // Render Channels section
-  if (channelCategories.length > 0) {
-    const section = createCategorySection("📺 Canais ao Vivo", channelCategories.slice(0, 3))
-    container.appendChild(section)
-  }
-
-  // Render Movies section
-  if (movieCategories.length > 0) {
-    const section = createCategorySection("🎬 Filmes", movieCategories.slice(0, 2))
-    container.appendChild(section)
-  }
-
-  // Render Series section
-  if (seriesCategories.length > 0) {
-    const section = createCategorySection("📺 Séries", seriesCategories.slice(0, 2))
-    container.appendChild(section)
-  }
-
-  // If no specific categories found, show first 5 categories
-  if (channelCategories.length === 0 && movieCategories.length === 0 && seriesCategories.length === 0) {
-    categories.slice(0, 5).forEach((category) => {
-      const section = createCategorySection(category, [category])
+  // Render a section for each category
+  categories.forEach((category) => {
+    // Only render categories that have channels
+    if (groupedChannels[category] && groupedChannels[category].length > 0) {
+      const section = createCategorySection(category)
       container.appendChild(section)
-    })
-  }
+    }
+  })
 }
 
-function createCategorySection(title, categoryList) {
-  const wrapper = document.createElement("div")
-  wrapper.className = "content-type-section"
+function createCategorySection(category) {
+  const section = document.createElement("div")
+  section.className = "category-section"
 
-  const sectionTitle = document.createElement("h2")
-  sectionTitle.className = "content-type-title"
-  sectionTitle.textContent = title
-  wrapper.appendChild(sectionTitle)
+  const categoryHeader = document.createElement("div")
+  categoryHeader.className = "category-header"
 
-  categoryList.forEach((category) => {
-    const section = document.createElement("div")
-    section.className = "category-section"
+  const categoryTitle = document.createElement("h3")
+  categoryTitle.className = "category-title"
+  categoryTitle.textContent = category
 
-    const categoryHeader = document.createElement("div")
-    categoryHeader.className = "category-header"
+  const viewAllBtn = document.createElement("button")
+  viewAllBtn.className = "view-all-btn"
+  viewAllBtn.textContent = "Ver mais"
+  viewAllBtn.onclick = () => showCategoryChannels(category)
 
-    const categoryTitle = document.createElement("h3")
-    categoryTitle.className = "category-title"
-    categoryTitle.textContent = category
+  categoryHeader.appendChild(categoryTitle)
+  categoryHeader.appendChild(viewAllBtn)
 
-    const viewAllBtn = document.createElement("button")
-    viewAllBtn.className = "view-all-btn"
-    viewAllBtn.textContent = "Ver todos"
-    viewAllBtn.onclick = () => showCategoryChannels(category)
+  const row = document.createElement("div")
+  row.className = "channels-row"
 
-    categoryHeader.appendChild(categoryTitle)
-    categoryHeader.appendChild(viewAllBtn)
-
-    const row = document.createElement("div")
-    row.className = "channels-row"
-
-    const categoryChannels = groupedChannels[category] || []
-    categoryChannels.slice(0, 10).forEach((channel) => {
-      row.appendChild(createChannelCard(channel))
-    })
-
-    section.appendChild(categoryHeader)
-    section.appendChild(row)
-    wrapper.appendChild(section)
+  const categoryChannels = groupedChannels[category] || []
+  categoryChannels.slice(0, 10).forEach((channel) => {
+    row.appendChild(createChannelCard(channel))
   })
 
-  return wrapper
+  section.appendChild(categoryHeader)
+  section.appendChild(row)
+
+  return section
 }
 
 // Render featured channel
@@ -418,50 +371,52 @@ function getChannelIcon(category) {
 
 // Play channel
 function playChannel(channel) {
-  console.log("[v0] Opening player for:", channel.name)
-
-  const modal = document.getElementById("playerModal")
   const video = document.getElementById("videoPlayer")
+  const modal = document.getElementById("playerModal")
   const channelName = document.getElementById("playerChannelName")
   const channelCategory = document.getElementById("playerChannelCategory")
 
   channelName.textContent = channel.name
   channelCategory.textContent = channel.category
 
+  if (hls) {
+    hls.destroy()
+  }
+
+  const videoUrl = channel.url
+  if (Hls.isSupported() && (videoUrl.includes(".m3u8") || videoUrl.includes("/ts"))) {
+    hls = new Hls()
+    hls.loadSource(videoUrl)
+    hls.attachMedia(video)
+    hls.on(Hls.Events.MANIFEST_PARSED, function () {
+      video.play()
+    })
+  } else if (video.canPlayType("application/vnd.apple.mpegurl")) {
+    video.src = videoUrl
+    video.addEventListener("loadedmetadata", function () {
+      video.play()
+    })
+  } else {
+    // Fallback for non-HLS streams
+    video.src = videoUrl
+    video.play()
+  }
+
   modal.style.display = "flex"
-
-  setTimeout(() => {
-    // Set video source
-    video.src = channel.url
-    video.load()
-
-    video.addEventListener("loadstart", () => {
-      console.log("[v0] Video loading started")
-    })
-
-    video.addEventListener("canplay", () => {
-      console.log("[v0] Video can play")
-    })
-
-    video.addEventListener("error", (e) => {
-      console.error("[v0] Video error:", e)
-      alert("Erro ao carregar o vídeo. Verifique a URL do stream.")
-    })
-
-    console.log("[v0] Playing channel:", channel.name, "URL:", channel.url)
-  }, 100)
 }
 
 // Close player
 function closePlayer() {
-  console.log("[v0] Closing player")
-
-  const modal = document.getElementById("playerModal")
   const video = document.getElementById("videoPlayer")
+  const modal = document.getElementById("playerModal")
+
+  if (hls) {
+    hls.destroy()
+  }
 
   video.pause()
   video.src = ""
-  video.load() // Reset video element
+  video.load()
 
   modal.style.display = "none"
 }

@@ -88,6 +88,7 @@ require_client_auth();
         </div>
     </div>
 
+    <script src="https://cdn.jsdelivr.net/npm/hls.js@latest"></script>
     <script src="assets/js/player.js"></script>
 </body>
 </html>
